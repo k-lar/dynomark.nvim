@@ -3,9 +3,6 @@ local M = {}
 local ns_id = vim.api.nvim_create_namespace("dynomark")
 
 local dynomark_enabled = false
-local config = {
-    hide_fences = false,
-}
 
 local function execute_dynomark_query(query)
     local handle = io.popen('dynomark --query "' .. query .. '"')
@@ -41,25 +38,7 @@ local function update_dynomark_blocks()
             local result = execute_dynomark_query(content)
 
             -- Clear existing virtual text
-            vim.api.nvim_buf_clear_namespace(0, ns_id, start_row - 1, end_row + 2)
-
-            if config.hide_fences then
-                -- Hide top fence
-                local top_fence = vim.fn.getline(start_row)
-                vim.api.nvim_buf_set_extmark(0, ns_id, start_row - 1, 0, {
-                    virt_text = { { string.rep(" ", #top_fence), "Conceal" } },
-                    virt_text_pos = "overlay",
-                    hl_mode = "combine",
-                })
-
-                -- Hide bottom fence
-                local bottom_fence = vim.fn.getline(end_row + 1)
-                vim.api.nvim_buf_set_extmark(0, ns_id, end_row + 1, 0, {
-                    virt_text = { { string.rep(" ", #bottom_fence), "Conceal" } },
-                    virt_text_pos = "overlay",
-                    hl_mode = "combine",
-                })
-            end
+            vim.api.nvim_buf_clear_namespace(0, ns_id, start_row, end_row + 1)
 
             -- Hide original content
             for i = start_row, end_row do
@@ -72,20 +51,19 @@ local function update_dynomark_blocks()
             end
 
             -- Add new virtual text for results
-            -- TODO: Fix bolding of the top line if syntax identifier is bolded when hiding fences
             local lines = vim.split(result, "\n")
             for i, line in ipairs(lines) do
                 local row = start_row + i - 1
-                if row <= end_row then
+                if row < end_row then
                     vim.api.nvim_buf_set_extmark(0, ns_id, row, 0, {
                         virt_text = { { line, "Comment" } },
                         virt_text_pos = "overlay",
                         hl_mode = "combine",
                     })
-                else
+                elseif row == end_row then
                     -- Add remaining lines as virtual lines
                     local remaining_lines = vim.list_slice(lines, i)
-                    vim.api.nvim_buf_set_extmark(0, ns_id, end_row, 0, {
+                    vim.api.nvim_buf_set_extmark(0, ns_id, row - 1, 0, {
                         virt_lines = vim.tbl_map(function(l)
                             return { { l, "Comment" } }
                         end, remaining_lines),
@@ -95,15 +73,13 @@ local function update_dynomark_blocks()
                 end
             end
 
-            if not config.hide_fences then
-                -- Ensure the bottom fence is visible
-                local bottom_fence = vim.fn.getline(end_row + 1)
-                vim.api.nvim_buf_set_extmark(0, ns_id, end_row + 1, 0, {
-                    virt_text = { { bottom_fence, "Comment" } },
-                    virt_text_pos = "overlay",
-                    hl_mode = "combine",
-                })
-            end
+            -- Ensure the bottom fence is visible
+            local bottom_fence = vim.fn.getline(end_row + 1)
+            vim.api.nvim_buf_set_extmark(0, ns_id, end_row, 0, {
+                virt_text = { { bottom_fence, "Comment" } },
+                virt_text_pos = "overlay",
+                hl_mode = "combine",
+            })
         end
     end
 end
@@ -122,7 +98,6 @@ end
 function M.setup(opts)
     -- Any setup options can be handled here
     opts = opts or {}
-    config = vim.tbl_deep_extend("force", config, opts)
 
     -- Create user commands
     -- vim.api.nvim_create_user_command("UpdateDynomark", update_dynomark_blocks, {})
