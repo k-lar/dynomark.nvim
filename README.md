@@ -9,10 +9,9 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 {
     "k-lar/dynomark.nvim",
-    config = function()
-        require("dynomark").setup()
-    end,
-}
+    dependencies = "nvim-treesitter/nvim-treesitter",
+    opts = {},
+},
 ```
 
 ## Usage
@@ -40,4 +39,6 @@ require("dynomark").setup({
 
 - Neovim >= 0.7.0
 - [dynomark](https://github.com/k-lar/dynomark) must be installed and available in your PATH.
+- Treesitter
+- Markdown Treesitter parser
 
