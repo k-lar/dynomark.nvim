@@ -14,6 +14,10 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 },
 ```
 
+## Showcase
+
+https://github.com/user-attachments/assets/15a5947d-bff3-4ef8-badf-2211c8d3c461
+
 ## Usage
 
 - Use `:ToggleDynomark` to enable/disable Dynomark functionality.
