@@ -41,6 +41,12 @@ require("dynomark").setup({
 })
 ```
 
+## Planned features
+
+- [ ] Function to run and show only single queries
+- [ ] Show query results that are longer than the amount of lines on the screen in a virtual scrollable window
+- [ ] Open a readonly/temp file that has results inserted in place of queries to allow saving "compiled" files
+
 ## Requirements
 
 - Neovim >= 0.7.0
