@@ -1,5 +1,9 @@
 local M = {}
 
+local config = {
+    remap_arrows = false,
+}
+
 local ns_id = vim.api.nvim_create_namespace("dynomark")
 
 local dynomark_enabled = false
@@ -96,8 +100,8 @@ function M.toggle_dynomark()
 end
 
 function M.setup(opts)
-    -- Any setup options can be handled here
-    opts = opts or {}
+    -- Copy default config and merge with user opts if they exist
+    config = vim.tbl_deep_extend("force", config, opts)
 
     -- Create user commands
     -- vim.api.nvim_create_user_command("UpdateDynomark", update_dynomark_blocks, {})
@@ -113,6 +117,51 @@ function M.setup(opts)
         return vim.api.nvim_create_augroup("dynomark_" .. name, { clear = true })
     end
 
+    local function check_cursor_proximity()
+        if config.remap_arrows == false then
+            return
+        end
+
+        local bufnr = vim.api.nvim_get_current_buf()
+        local cursor = vim.api.nvim_win_get_cursor(0)
+        local cursor_line = cursor[1] - 1 -- Convert to 0-based index
+
+        -- Get all virtual text positions for the current buffer and namespace
+        local extmarks = vim.api.nvim_buf_get_extmarks(bufnr, ns_id, 0, -1, { details = true })
+
+        -- Reset mappings to default
+        vim.keymap.set("n", "<Up>", "k", { buffer = bufnr })
+        vim.keymap.set("n", "<Down>", "j", { buffer = bufnr })
+
+        -- Check if the cursor is near any virtual text
+        for _, extmark in ipairs(extmarks) do
+            local virt_text_line = extmark[2]
+            local line_diff = cursor_line - virt_text_line
+
+            if line_diff == 1 then
+                -- Virtual text is above, map only Up key
+                vim.keymap.set("n", "<Up>", "<C-y>", { buffer = bufnr, nowait = true })
+            elseif line_diff == -1 then
+                -- Virtual text is below, map only Down key
+                vim.keymap.set("n", "<Down>", "<C-e>", { buffer = bufnr, nowait = true })
+            end
+
+            if math.abs(line_diff) == 1 then
+                -- Set up an autocmd to reset mappings when the cursor moves away
+                vim.api.nvim_create_autocmd("CursorMoved", {
+                    buffer = bufnr,
+                    once = true,
+                    callback = function()
+                        vim.keymap.set("n", "<Up>", "k", { buffer = bufnr })
+                        vim.keymap.set("n", "<Down>", "j", { buffer = bufnr })
+                    end,
+                })
+
+                return
+            end
+        end
+    end
+
     vim.api.nvim_create_autocmd(
         { "FocusGained", "BufWritePost", "WinEnter", "BufEnter", "InsertLeave", "InsertEnter" },
         {
@@ -126,6 +175,15 @@ function M.setup(opts)
             end,
         }
     )
+
+    vim.api.nvim_create_autocmd("CursorMoved", {
+        pattern = "*.md",
+        desc = "Allow users to scroll when next to virtual text",
+        group = augroup("cursor_in_virtualtext"),
+        callback = function()
+            check_cursor_proximity()
+        end,
+    })
 end
 
 return M

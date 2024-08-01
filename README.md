@@ -31,11 +31,13 @@ vim.keymap.set("n", "<leader>v", "<Plug>(ToggleDynomark)", { desc = "Toggle Dyno
 
 ## Configuration
 
-No additional configuration is required, but you can pass options to the setup function if needed in the future when this plugin receives updates.
+Many lines of virtual text don't play well with cursors, especially when the cursor is on the top
+or bottom of the screen. There's an experimental option `remap_arrows`, that tries to make scrolling
+long query results better with arrow keys. This option is `false` by default.
 
 ```lua
 require("dynomark").setup({
-    -- options here (but there are none yet)
+    remap_arrows = false
 })
 ```
 
