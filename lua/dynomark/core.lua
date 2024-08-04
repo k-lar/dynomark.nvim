@@ -7,9 +7,22 @@ local config = {
 local ns_id = vim.api.nvim_create_namespace("dynomark")
 
 local dynomark_enabled = false
+local dynomark_exists = vim.fn.executable("dynomark") == 1
 
 local function execute_dynomark_query(query)
-    local handle = io.popen('dynomark --query "' .. query .. '"')
+    if not dynomark_exists then
+        vim.notify("Dynomark is not installed. Please install it to use this plugin", vim.log.levels.ERROR)
+        dynomark_enabled = false
+        return ""
+    end
+
+    -- Handle env variables are in the query, replace them with their values
+    query = query:gsub("%$%b{}", function(match)
+        local env_var = match:sub(3, -2)
+        return os.getenv(env_var) or match
+    end)
+
+    local handle = io.popen("dynomark --query '" .. query .. "'")
     local result = handle:read("*a")
     handle:close()
     return result:gsub("^%s*(.-)%s*$", "%1") -- Trim whitespace
