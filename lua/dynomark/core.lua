@@ -6,9 +6,7 @@ local config = {
 }
 
 local ns_id = vim.api.nvim_create_namespace("dynomark")
-
 local dynomark_enabled = false
-
 local dynomark_exists = vim.fn.executable("dynomark") == 1
 
 local dynomark_query = [[
@@ -40,19 +38,19 @@ local function execute_dynomark_query(query)
         return ""
     end
 
-    -- Handle env variables are in the query, replace them with their values
-    query = query:gsub("%$%b{}", function(match)
-        local env_var = match:sub(3, -2)
-        return os.getenv(env_var) or match
-    end)
-
     local handle = io.popen("dynomark --query '" .. query .. "'")
+    if not handle then
+        vim.notify("Failed to execute dynomark command", vim.log.levels.ERROR)
+        return ""
+    end
+
     local result = handle:read("*a")
     handle:close()
     return result:gsub("^%s*(.-)%s*$", "%1") -- Trim whitespace
 end
 
-local function setup_results_buffer(result)
+local function setup_results_buffer(result, buf_name)
+    buf_name = buf_name or "dynomark_results"
     local buf = vim.api.nvim_get_current_buf()
 
     vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
@@ -60,7 +58,7 @@ local function setup_results_buffer(result)
     vim.api.nvim_buf_set_option(buf, "swapfile", false)
     vim.api.nvim_buf_set_option(buf, "filetype", "markdown")
 
-    vim.api.nvim_buf_set_name(buf, "dynomark_results")
+    vim.api.nvim_buf_set_name(buf, buf_name)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(result, "\n"))
 end
 
@@ -68,20 +66,6 @@ local function update_dynomark_blocks()
     if not dynomark_enabled then
         return
     end
-
-    local parser = vim.treesitter.get_parser(0, "markdown")
-    local tree = parser:parse()[1]
-    local root = tree:root()
-
-    local query = vim.treesitter.query.parse(
-        "markdown",
-        [[
-        (fenced_code_block
-            (info_string) @lang
-            (#eq? @lang "dynomark")
-            (code_fence_content) @content)
-    ]]
-    )
 
     query_dynomark_blocks(function(node)
         local start_row, start_col, end_row, end_col = node:range()
@@ -226,12 +210,7 @@ function M.execute_all_dynomark_blocks()
     local cmd = results_view_table[config.results_view_location] or "vnew"
     vim.cmd(cmd)
 
-    local buf = vim.api.nvim_get_current_buf()
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_lines)
-    vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
-    vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")
-    vim.api.nvim_buf_set_option(buf, "filetype", "markdown")
-    vim.api.nvim_buf_set_name(buf, "dynomark_processed.md")
+    setup_results_buffer(table.concat(new_lines, "\n"), "dynomark_compiled")
 
     vim.notify("All dynomark blocks processed", vim.log.levels.INFO, { title = "Dynomark" })
 end
