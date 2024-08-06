@@ -186,6 +186,56 @@ function M.execute_current_dynomark_block()
     setup_results_buffer(result)
 end
 
+function M.execute_all_dynomark_blocks()
+    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    local new_lines = {}
+    local in_dynomark_block = false
+    local current_block = {}
+    -- TODO: Keep this for now, maybe add config option to allow compiling with
+    -- dynomark fence lines kept intact
+    local fence_line = ""
+
+    for _, line in ipairs(lines) do
+        if line:match("^```dynomark") then
+            in_dynomark_block = true
+            fence_line = line
+            current_block = {}
+        elseif in_dynomark_block and line:match("^```%s*$") then
+            in_dynomark_block = false
+            local content = table.concat(current_block, "\n")
+            local result = execute_dynomark_query(content)
+            -- table.insert(new_lines, fence_line)
+            for _, result_line in ipairs(vim.split(result, "\n")) do
+                table.insert(new_lines, result_line)
+            end
+            -- table.insert(new_lines, line)
+        elseif in_dynomark_block then
+            table.insert(current_block, line)
+        else
+            table.insert(new_lines, line)
+        end
+    end
+
+    -- Create a new buffer with the processed content
+    local results_view_table = {
+        vertical = "vnew",
+        horizontal = "new",
+        tab = "tabnew",
+    }
+
+    local cmd = results_view_table[config.results_view_location] or "vnew"
+    vim.cmd(cmd)
+
+    local buf = vim.api.nvim_get_current_buf()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_lines)
+    vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
+    vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")
+    vim.api.nvim_buf_set_option(buf, "filetype", "markdown")
+    vim.api.nvim_buf_set_name(buf, "dynomark_processed.md")
+
+    vim.notify("All dynomark blocks processed", vim.log.levels.INFO, { title = "Dynomark" })
+end
+
 function M.setup(opts)
     -- Copy default config and merge with user opts if they exist
     config = vim.tbl_deep_extend("force", config, opts)
@@ -194,6 +244,7 @@ function M.setup(opts)
     -- vim.api.nvim_create_user_command("UpdateDynomark", update_dynomark_blocks, {})
     vim.api.nvim_create_user_command("ExecuteDynomark", M.execute_current_dynomark_block, {})
     vim.api.nvim_create_user_command("ToggleDynomark", M.toggle_dynomark, {})
+    vim.api.nvim_create_user_command("CompileDynomark", M.execute_all_dynomark_blocks, {})
 
     -- Define a keymap for users to map in their own config
     vim.keymap.set("n", "<Plug>(ToggleDynomark)", function()
