@@ -38,7 +38,8 @@ local function execute_dynomark_query(query)
         return ""
     end
 
-    local handle = io.popen("dynomark --query '" .. query .. "'")
+    -- 2>&1 to redirect errors from stderr to stdout, because io.popen can't read stderr for some reason
+    local handle = io.popen("dynomark --query '" .. query .. "' 2>&1")
     if not handle then
         vim.notify("Failed to execute dynomark command", vim.log.levels.ERROR)
         return ""
