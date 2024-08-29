@@ -3,6 +3,8 @@ local M = {}
 local config = {
     remap_arrows = false,
     results_view_location = "vertical",
+    float_horizontal_offset = 0.2,
+    float_vertical_offset = 0.2,
 }
 
 local ns_id = vim.api.nvim_create_namespace("dynomark")
@@ -15,6 +17,61 @@ local dynomark_query = [[
         (#eq? @lang "dynomark")
         (code_fence_content) @content)
 ]]
+
+local function get_view_location(arg)
+    local valid_locations = { "tab", "vertical", "horizontal", "float" }
+    if arg and vim.tbl_contains(valid_locations, arg) then
+        return arg
+    end
+    return config.results_view_location
+end
+
+function M.run_dynomark(args)
+    if not args or not args.fargs or #args.fargs < 1 then
+        M.execute_current_dynomark_block()
+        return
+    else
+        local view_location = get_view_location(args.fargs[1])
+        local old_view_location = config.results_view_location
+        config.results_view_location = view_location
+        M.execute_current_dynomark_block()
+        config.results_view_location = old_view_location
+    end
+end
+
+function M.compile_dynomark(args)
+    local view_location = get_view_location(args.fargs[1])
+    local old_view_location = config.results_view_location
+    config.results_view_location = view_location
+    M.execute_all_dynomark_blocks()
+    config.results_view_location = old_view_location
+end
+
+local function create_dynomark_command()
+    vim.api.nvim_create_user_command("Dynomark", function(args)
+        local subcommand = args.fargs[1]
+        if subcommand == "run" then
+            M.run_dynomark({ fargs = { args.fargs[2] } })
+        elseif subcommand == "compile" then
+            M.compile_dynomark({ fargs = { args.fargs[2] } })
+        elseif subcommand == "toggle" then
+            M.toggle_dynomark()
+        else
+            vim.notify("Invalid Dynomark subcommand. Use 'run', 'compile', or 'toggle'.", vim.log.levels.ERROR)
+        end
+    end, {
+        nargs = "+",
+        complete = function(_, cmdline)
+            local args = vim.split(cmdline, "%s+")
+            if #args == 2 then
+                return { "run", "compile", "toggle" }
+            elseif #args == 3 and (args[2] == "run" or args[2] == "compile") then
+                return { "tab", "vertical", "horizontal", "float" }
+            end
+            return {}
+        end,
+    })
+end
 
 local function query_dynomark_blocks(callback)
     local parser = vim.treesitter.get_parser(0, "markdown")
@@ -50,9 +107,62 @@ local function execute_dynomark_query(query)
     return result:gsub("^%s*(.-)%s*$", "%1") -- Trim whitespace
 end
 
+local function get_content_dimensions(content)
+    local lines = vim.split(content, "\n")
+    local height = #lines
+    local width = 0
+    for _, line in ipairs(lines) do
+        width = math.max(width, #line)
+    end
+    return height, width
+end
+
+local function create_float_window(content)
+    local content_height, content_width = get_content_dimensions(content)
+
+    local min_height = 10
+    local max_height = math.floor(vim.o.lines * 0.8)
+    local min_width = 30
+    local max_width = math.floor(vim.o.columns * 0.8)
+
+    local height = math.max(min_height, math.min(content_height, max_height))
+    local width = math.max(min_width, math.min(content_width, max_width))
+
+    -- Calculate row to center the window vertically
+    local row = math.floor((vim.o.lines * (0.5 + config.float_vertical_offset) - height) / 2)
+
+    -- Calculate col to position the window horizontally with the offset
+    local col = math.floor(vim.o.columns * (0.5 + config.float_horizontal_offset) - width / 2)
+
+    -- Ensure the window stays within the screen boundaries
+    row = math.max(0, math.min(row, vim.o.lines - height))
+    col = math.max(0, math.min(col, vim.o.columns - width))
+
+    local opts = {
+        relative = "editor",
+        row = row,
+        col = col,
+        width = width,
+        height = height,
+        style = "minimal",
+        border = "rounded",
+    }
+
+    local buf = vim.api.nvim_create_buf(false, true)
+    local win = vim.api.nvim_open_win(buf, true, opts)
+
+    return buf, win
+end
+
 local function setup_results_buffer(result, buf_name)
     buf_name = buf_name or "dynomark_results"
-    local buf = vim.api.nvim_get_current_buf()
+    local buf, win
+
+    if config.results_view_location == "float" then
+        buf, win = create_float_window(result)
+    else
+        buf = vim.api.nvim_get_current_buf()
+    end
 
     vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
     vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")
@@ -61,6 +171,7 @@ local function setup_results_buffer(result, buf_name)
 
     vim.api.nvim_buf_set_name(buf, buf_name)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(result, "\n"))
+    vim.api.nvim_buf_set_option(buf, "modifiable", true)
 end
 
 local function update_dynomark_blocks()
@@ -163,11 +274,14 @@ function M.execute_current_dynomark_block()
         vertical = "vnew",
         horizontal = "new",
         tab = "tabnew",
+        float = function() end, -- Do nothing here, as we handle float separately
     }
 
-    local cmd = results_view_table[config.results_view_location] or "vnew"
+    local cmd = results_view_table[config.results_view_location]
+    if type(cmd) == "string" then
+        vim.cmd(cmd)
+    end
 
-    vim.cmd(cmd)
     setup_results_buffer(result)
 end
 
@@ -206,10 +320,13 @@ function M.execute_all_dynomark_blocks()
         vertical = "vnew",
         horizontal = "new",
         tab = "tabnew",
+        float = function() end,
     }
 
-    local cmd = results_view_table[config.results_view_location] or "vnew"
-    vim.cmd(cmd)
+    local cmd = results_view_table[config.results_view_location]
+    if type(cmd) == "string" then
+        vim.cmd(cmd)
+    end
 
     setup_results_buffer(table.concat(new_lines, "\n"), "dynomark_compiled")
 
@@ -221,17 +338,14 @@ function M.setup(opts)
     config = vim.tbl_deep_extend("force", config, opts)
 
     -- Create user commands
-    -- vim.api.nvim_create_user_command("UpdateDynomark", update_dynomark_blocks, {})
-    vim.api.nvim_create_user_command("ExecuteDynomark", M.execute_current_dynomark_block, {})
-    vim.api.nvim_create_user_command("ToggleDynomark", M.toggle_dynomark, {})
-    vim.api.nvim_create_user_command("CompileDynomark", M.execute_all_dynomark_blocks, {})
+    create_dynomark_command()
 
     -- Define a keymap for users to map in their own config
-    vim.keymap.set("n", "<Plug>(ToggleDynomark)", function()
+    vim.keymap.set("n", "<Plug>(DynomarkToggle)", function()
         M.toggle_dynomark()
     end, { noremap = true })
-    vim.keymap.set("n", "<Plug>(ExecuteDynomarkQuery)", function()
-        M.execute_current_dynomark_block()
+    vim.keymap.set("n", "<Plug>(DynomarkRun)", function()
+        M.run_dynomark({})
     end, { noremap = true })
 
     -- Autocommands
