@@ -10,6 +10,7 @@ local config = {
 local ns_id = vim.api.nvim_create_namespace("dynomark")
 local dynomark_enabled = false
 local dynomark_exists = vim.fn.executable("dynomark") == 1
+local is_windows = vim.loop.os_uname().sysname == "Windows"
 
 local dynomark_query = [[
     (fenced_code_block
@@ -95,15 +96,22 @@ local function execute_dynomark_query(query)
         return ""
     end
 
+    local result = ""
+
     -- 2>&1 to redirect errors from stderr to stdout, because io.popen can't read stderr for some reason
-    local handle = io.popen("dynomark --query '" .. query .. "' 2>&1")
-    if not handle then
-        vim.notify("Failed to execute dynomark command", vim.log.levels.ERROR)
-        return ""
+    if not is_windows then
+        local handle = io.popen("dynomark --query '" .. query .. "' 2>&1")
+        if not handle then
+            vim.notify("Failed to execute dynomark command", vim.log.levels.ERROR)
+            return ""
+        end
+
+        result = handle:read("*a")
+        handle:close()
+    else
+        result = vim.fn.system("dynomark --query '" .. query .. "' 2>&1")
     end
 
-    local result = handle:read("*a")
-    handle:close()
     return result:gsub("^%s*(.-)%s*$", "%1") -- Trim whitespace
 end
 
