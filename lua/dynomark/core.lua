@@ -5,12 +5,18 @@ local config = {
     results_view_location = "vertical",
     float_horizontal_offset = 0.2,
     float_vertical_offset = 0.2,
+    auto_download = false,
 }
 
+local url = "https://github.com/k-lar/dynomark/releases/latest/download/"
+local install_path = vim.fn.stdpath("data") .. "/dynomark.nvim/bin/"
+if vim.fn.isdirectory(install_path) == 0 then
+    vim.fn.mkdir(install_path, "p")
+end
 local ns_id = vim.api.nvim_create_namespace("dynomark")
 local dynomark_enabled = false
-local dynomark_exists = vim.fn.executable("dynomark") == 1
 local is_windows = vim.loop.os_uname().sysname == "Windows"
+local is_mac = vim.loop.os_uname().sysname == "Darwin"
 
 local dynomark_query = [[
     (fenced_code_block
@@ -18,6 +24,68 @@ local dynomark_query = [[
         (#eq? @lang "dynomark")
         (code_fence_content) @content)
 ]]
+
+local function getBinaryPath()
+    if vim.fn.executable("dynomark") == 1 then
+        return "dynomark"
+    end
+
+    if is_windows then
+        return install_path .. "dynomark.exe"
+    elseif is_mac then
+        return install_path .. "dynomark-macos"
+    else
+        return install_path .. "dynomark-linux"
+    end
+end
+
+local dynomark_bin = getBinaryPath()
+local dynomark_exists = vim.fn.executable("dynomark") == 1 or vim.fn.executable(dynomark_bin) == 1
+
+local function downloadBinary()
+    local download_url = url
+    local curl_cmd = ""
+    local chmod_cmd = "chmod +x " .. dynomark_bin
+
+    if is_windows then
+        download_url = url .. "dynomark.exe"
+        curl_cmd = "Invoke-WebRequest -Uri " .. download_url .. " -OutFile " .. dynomark_bin
+    elseif is_mac then
+        download_url = url .. "dynomark-macos"
+        curl_cmd = "curl -L -o " .. dynomark_bin .. " " .. download_url
+    else
+        download_url = url .. "dynomark-linux"
+        curl_cmd = "curl -L -o " .. dynomark_bin .. " " .. download_url
+    end
+
+    vim.notify("Downloading Dynomark binary...", vim.log.levels.INFO, { title = "Dynomark" })
+    local curl_output = vim.fn.system(curl_cmd)
+    local curl_exit_code = vim.v.shell_error
+
+    if curl_exit_code == 0 then
+        vim.notify(
+            "Download succeeded. File is located here: " .. dynomark_bin,
+            vim.log.levels.INFO,
+            { title = "Dynomark" }
+        )
+
+        if not is_windows then
+            local chmod_output = vim.fn.system(chmod_cmd)
+            local chmod_exit_code = vim.v.shell_error
+
+            if chmod_exit_code ~= 0 then
+                vim.notify("Permission change failed: " .. chmod_output, vim.log.levels.ERROR, { title = "Dynomark" })
+            else
+                dynomark_exists = true
+            end
+        else
+            dynomark_exists = true
+        end
+    else
+        vim.notify("Download failed: " .. curl_output, vim.log.levels.ERROR, { title = "Dynomark" })
+        return
+    end
+end
 
 local function get_view_location(arg)
     local valid_locations = { "tab", "vertical", "horizontal", "float" }
@@ -100,7 +168,7 @@ local function execute_dynomark_query(query)
 
     -- 2>&1 to redirect errors from stderr to stdout, because io.popen can't read stderr for some reason
     if not is_windows then
-        local handle = io.popen("dynomark --query '" .. query .. "' 2>&1")
+        local handle = io.popen(dynomark_bin .. " --query '" .. query .. "' 2>&1")
         if not handle then
             vim.notify("Failed to execute dynomark command", vim.log.levels.ERROR)
             return ""
@@ -109,7 +177,7 @@ local function execute_dynomark_query(query)
         result = handle:read("*a")
         handle:close()
     else
-        result = vim.fn.system("dynomark --query '" .. query .. "' 2>&1")
+        result = vim.fn.system(dynomark_bin .. " --query '" .. query .. "' 2>&1")
     end
 
     return result:gsub("^%s*(.-)%s*$", "%1") -- Trim whitespace
@@ -404,6 +472,10 @@ function M.setup(opts)
                 return
             end
         end
+    end
+
+    if config.auto_download and not dynomark_exists then
+        downloadBinary()
     end
 
     vim.api.nvim_create_autocmd(

@@ -55,6 +55,11 @@ long query results better with arrow keys. This option is `false` by default.
         -- If you want to have the window centered, set both offsets to 0.0
         float_horizontal_offset = 0.2,
         float_vertical_offset = 0.2,
+
+        -- Turn this to true if you want the plugin to automatically download
+        -- the dynomark engine if it's not found in your PATH.
+        -- This is false by default!
+        auto_download = false,
     },
 }
 ```
