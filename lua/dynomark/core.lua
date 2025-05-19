@@ -15,7 +15,7 @@ if vim.fn.isdirectory(install_path) == 0 then
 end
 local ns_id = vim.api.nvim_create_namespace("dynomark")
 local dynomark_enabled = false
-local is_windows = vim.loop.os_uname().sysname == "Windows"
+local is_windows = (vim.loop.os_uname().sysname == "Windows") or (vim.loop.os_uname().sysname == "Windows_NT")
 local is_mac = vim.loop.os_uname().sysname == "Darwin"
 
 local dynomark_query = [[
