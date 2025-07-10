@@ -177,7 +177,7 @@ local function execute_dynomark_query(query)
         result = handle:read("*a")
         handle:close()
     else
-        result = vim.fn.system(dynomark_bin .. " --query '" .. query .. "' 2>&1")
+        result = vim.fn.system(dynomark_bin .. ' --query "' .. query .. '" 2>&1')
     end
 
     return result:gsub("^%s*(.-)%s*$", "%1") -- Trim whitespace
